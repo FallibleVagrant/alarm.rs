@@ -1,6 +1,6 @@
 use std::env;
 use std::thread;
-use::std::time::{Duration, Instant};
+use::std::time::{Duration, SystemTime};
 use std::num::ParseFloatError;
 
 #[derive(Debug)]
@@ -75,29 +75,31 @@ fn parse_to_seconds(time_suffixed: &str) -> f64 {
     return output;
 }
 
-fn is_deadline_passed(current_time: Instant, deadline: Instant) -> bool {
-    return current_time.checked_duration_since(deadline).is_some();
+fn is_deadline_passed(current_time: SystemTime, deadline: SystemTime) -> bool {
+    return current_time.duration_since(deadline).is_ok();
 }
 
-fn sleep_for_a_time(previous_time: Instant, current_time: Instant, remaining_duration: Duration, duration_to_sleep: &mut Duration) {
+fn current_minus_previous_time(current_time: SystemTime, previous_time: SystemTime) -> Duration {
+	return current_time.duration_since(previous_time).unwrap_or_else(|_x| Duration::from_secs(0));
+}
+
+fn sleep_for_a_time(previous_time: SystemTime, current_time: SystemTime, remaining_duration: Duration, duration_to_sleep: &mut Duration) {
     let min_sleep_duration = Duration::from_secs_f64(0.1);
     let baseline_sleep_duration = Duration::from_secs_f64(0.5);
     let max_sleep_duration = Duration::from_secs(60);
     let grace_period = Duration::from_secs_f64(0.5);
 
     //Test if the system was suspended while this process was asleep.
-	eprintln!("current_time - previous_time: {:?}.", current_time - previous_time);
-	eprintln!("*duration_to_sleep + grace_period: {:?}.", *duration_to_sleep + grace_period);
-    if current_time - previous_time > *duration_to_sleep + grace_period {
-        println!("System was detected asleep; resetting sleep timer.");
-        eprintln!("System was detected asleep; resetting sleep timer.");
+	//eprintln!("current_time - previous_time: {:?}.", current_minus_previous_time(current_time, previous_time));
+    if current_minus_previous_time(current_time, previous_time) > *duration_to_sleep + grace_period {
+        //eprintln!("System was detected asleep; resetting sleep timer.");
         *duration_to_sleep = baseline_sleep_duration;
     }
 
     *duration_to_sleep *= 2;
 
     if *duration_to_sleep > max_sleep_duration {
-		eprintln!("Hit above {:?} secs sleep period, setting to {:?}.", max_sleep_duration, max_sleep_duration);
+		//eprintln!("Hit above {:?} secs sleep period, setting to {:?}.", max_sleep_duration, max_sleep_duration);
         *duration_to_sleep = max_sleep_duration;
     }
 
@@ -105,47 +107,47 @@ fn sleep_for_a_time(previous_time: Instant, current_time: Instant, remaining_dur
     if *duration_to_sleep >= remaining_duration {
         if *duration_to_sleep - remaining_duration >= min_sleep_duration {
             *duration_to_sleep = remaining_duration / 2;
-			eprintln!("duration_to_sleep is close to remaining_duration, setting to {:?}.", *duration_to_sleep);
+			//eprintln!("duration_to_sleep is close to remaining_duration, setting to {:?}.", *duration_to_sleep);
         }
         else {
-			eprintln!("duration_to_sleep is close to remaining_duration, setting to 0.");
+			//eprintln!("duration_to_sleep is close to remaining_duration, setting to 0.");
             *duration_to_sleep = Duration::from_secs(0);
         }
     }
 
-    eprintln!("Sleeping for: {:?} seconds.", *duration_to_sleep);
+    //eprintln!("Sleeping for: {:?} seconds.", *duration_to_sleep);
     thread::sleep(*duration_to_sleep);
 }
 
 //Probably implemented in the stdlib by the time you are reading this.
-fn sleep_until(deadline: Instant) {
-    let mut current_time = Instant::now();
-    let mut previous_time: Instant;
+fn sleep_until(deadline: SystemTime) {
+    let mut current_time = SystemTime::now();
+    let mut previous_time: SystemTime;
     let mut remaining_duration: Duration;
 
     let init_sleep_duration = Duration::from_secs_f64(0.5);
 
     let mut duration_to_sleep = init_sleep_duration;
 
-    eprintln!("Alarm time is: {:?}", deadline);
-    eprintln!("Current time is: {:?}", current_time);
+    //eprintln!("Alarm time is: {:?}", deadline);
+    //eprintln!("Current time is: {:?}", current_time);
 
     while !is_deadline_passed(current_time, deadline) {
         previous_time = current_time;
-        current_time = Instant::now();
-        remaining_duration = deadline.checked_duration_since(current_time)
-                                    .unwrap_or_else(|| Duration::from_secs(0));
+        current_time = SystemTime::now();
+        remaining_duration = deadline.duration_since(current_time)
+                                    .unwrap_or_else(|_x| Duration::from_secs(0));
 
-        eprintln!("-------------------------------------------------remaining_duration is: {:?}.", remaining_duration);
-        eprintln!("current_time: {:?}.", current_time);
-        eprintln!("previous_time: {:?}.", previous_time);
+        //eprintln!("-------------------------------------------------remaining_duration is: {:?}.", remaining_duration);
+        //eprintln!("current_time: {:?}.", current_time);
+        //eprintln!("previous_time: {:?}.", previous_time);
 
         sleep_for_a_time(previous_time, current_time, remaining_duration, &mut duration_to_sleep);
     }
 }
 
 fn main() {
-    env::set_var("RUST_BACKTRACE", "1");
+    //env::set_var("RUST_BACKTRACE", "1");
     let args: Vec<String> = env::args().collect();
     if args.len() < 2 {
         eprintln!("Not enough arguments.");
@@ -158,6 +160,6 @@ fn main() {
         time_to_wait += parse_to_seconds(&arg);
     }
 
-    eprintln!("time_to_wait: {:?}", time_to_wait);
-    sleep_until(Instant::now() + Duration::from_secs_f64(time_to_wait));
+    //eprintln!("time_to_wait: {:?}", time_to_wait);
+    sleep_until(SystemTime::now() + Duration::from_secs_f64(time_to_wait));
 }
